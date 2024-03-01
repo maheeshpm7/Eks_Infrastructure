@@ -1,45 +1,46 @@
-module "eks" {
-  source                  = "./modules/eks"
-  aws_public_subnet       = module.vpc.aws_public_subnet
-  vpc_id                  = module.vpc.vpc_id
-  cluster_name            = var.cluster_name
-  endpoint_public_access  = false
-  endpoint_private_access = true
-  public_access_cidrs     = var.public_access_cidrs
-  node_group_name         = var.node_group_name
-  scaling_desired_size    = var.scaling_desired_size
-  scaling_max_size        = var.scaling_max_size
-  scaling_min_size        = var.scaling_min_size
-  instance_types          = var.instance_types
-  key_pair                = var.key_pair
+resource "aws_instance" "bastion_host" {
+  ami           = var.ami_id
+  instance_type = var.instance_type_BH
+  key_name      = var.key_name
+  subnet_id     = var.subnet_id[0]
+  user_data = data.template_file.userdata.rendered
+
+  vpc_security_group_ids = [
+    aws_security_group.bastion_sg.id
+  ]
+
+  tags = {
+    Name = "Bastion Host"
+  }
 }
 
-module "vpc" {
-  source           = "./modules/vpc"
-  # vpc_name            = var.vpc_name
-  tags             = var.tags
-  instance_tenancy = var.instance_tenancy
-  vpc_cidr         = var.vpc_cidr
-  # access_ip               = "0.0.0.0/0"
-  access_ip               = var.access_ip
-  public_sn_count         = var.public_sn_count
-  public_cidrs            = var.public_cidrs
-  map_public_ip_on_launch = var.map_public_ip_on_launch
-  rt_route_cidr_block     = var.rt_route_cidr_block
+resource "aws_security_group" "bastion_sg" {
+  name        = "bastion_sg"
+  description = "Security group for Bastion Host"
+  vpc_id      = var.vpc_id
 
-}
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = var.allowed_cidr_blocks
+  }
+  ingress {
+    description = "Allow HTTPS"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
-module "bastionhost" {
-  source    = "./modules/bastionhost"
-  vpc_id    = module.vpc.vpc_id
-  key_name  = var.key_name
-  subnet_id = module.vpc.aws_public_subnet
-  ami_id    = var.ami_id
-  instance_type_BH = var.instance_type_BH
-}
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
-module "ecr" {
-  source            = "./modules/ecr"
-  repository_names  = var.repository_names
-  image_tag_mutability = var.image_tag_mutability
+  tags = {
+    Name = "Bastion SG"
+  }
 }
